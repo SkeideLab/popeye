@@ -1,6 +1,6 @@
 # -------------------------------------------------------------------
 
-from popeye.numerosity.popeye_numerosity_stimulus import NumerosityStimulus
+from popeye_numerosity_stimulus import NumerosityStimulus
 import matplotlib.pyplot as plt
 import ctypes
 import multiprocessing
@@ -10,7 +10,7 @@ import sharedmem
 import popeye.og_hrf as og
 import popeye.utilities as utils
 from popeye.visual_stimulus import VisualStimulus, simulate_bar_stimulus
-from popeye.numerosity.popeye_numerosity_model import NumerosityModel, NumerosityFit
+from popeye_numerosity_model import NumerosityModel, NumerosityFit
 
 # seed random number generator so we get the same answers ...
 np.random.seed(2764932)
