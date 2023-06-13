@@ -41,8 +41,8 @@ class NumerosityModel(PopulationModel):
     def calc_prediction(self, num_pref, tw):
         print(f"Testing numerosity log: {num_pref} and tw: {tw}")
         # receptive field
-        rf = np.exp(-1 * (self.stimulus.log_grid - num_pref) ** 2 /
-                    (2 * tw**2))
+        # rf = np.exp(-1 * (self.stimulus.log_grid - num_pref) ** 2 /
+        #             (2 * tw**2))
         rf = generate_og_receptive_field(
             num_pref, 0, tw, self.stimulus.log_grid[np.newaxis], np.zeros(self.stimulus.log_grid[np.newaxis].shape))
 
@@ -89,10 +89,12 @@ class NumerosityModel(PopulationModel):
         beta, baseline = self.regress(model, self.data)
 
         # scale
-        model *= beta
+        if not np.isnan(beta):
+            model *= beta
 
         # offset
-        model += baseline
+        if not np.isnan(baseline):
+            model += baseline
 
         return model
 
@@ -113,11 +115,13 @@ class NumerosityModel(PopulationModel):
             return model
         else:
 
-            # scale it by beta
-            model *= beta
+            # scale
+            if not np.isnan(beta):
+                model *= beta
 
             # offset
-            model += baseline
+            if not np.isnan(baseline):
+                model += baseline
 
             return model
 
@@ -193,7 +197,7 @@ class NumerosityFit(PopulationFit):
         fwhm = self.tw*(2*np.sqrt(2*np.log(2)))
         fwhm = np.exp(self.num_pref+fwhm/2)-np.exp(self.num_pref-fwhm/2)
 
-        return [np.exp(self.num_pref), fwhm, self.beta, self.baseline]
+        return [np.exp(self.num_pref), fwhm, self.tw, self.beta, self.baseline]
 
     @auto_attr
     def num_pref0(self):
