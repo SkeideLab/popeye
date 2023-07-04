@@ -39,12 +39,11 @@ class NumerosityModel(PopulationModel):
         self.hrf_delay = hrf_delay
 
     def calc_prediction(self, num_pref, tw):
-        print(f"Testing numerosity log: {num_pref} and tw: {tw}")
         # receptive field
         # rf = np.exp(-1 * (self.stimulus.log_grid - num_pref) ** 2 /
         #             (2 * tw**2))
         rf = generate_og_receptive_field(
-            num_pref, 0, tw, self.stimulus.log_grid[np.newaxis], np.zeros(self.stimulus.log_grid[np.newaxis].shape))
+            num_pref, 0, tw, self.stimulus.log_grid, np.zeros(self.stimulus.log_grid.shape))
 
         # evaluate entire RF
         mask = np.ones_like(rf).astype('uint8')

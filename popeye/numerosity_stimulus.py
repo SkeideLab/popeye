@@ -25,7 +25,7 @@ def generate_log_numerosity(ts):
     # stimulus timeseries encoded as ohv
     stimulus_ts = ohv[lut[np.array(ts)-1]].T
 
-    return stimulus_ts, np.log(numerosities)
+    return stimulus_ts, np.log(np.atleast_2d(numerosities))
 
 
 class NumerosityStimulus(StimulusModel):
