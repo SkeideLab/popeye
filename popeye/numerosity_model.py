@@ -196,7 +196,7 @@ class NumerosityFit(PopulationFit):
         fwhm = self.tw*(2*np.sqrt(2*np.log(2)))
         fwhm = np.exp(self.num_pref+fwhm/2)-np.exp(self.num_pref-fwhm/2)
 
-        return [np.exp(self.num_pref), fwhm, self.tw, self.beta, self.baseline]
+        return [np.exp(self.num_pref), fwhm, self.tw, self.rsquared, self.beta, self.baseline]
 
     @auto_attr
     def num_pref0(self):
