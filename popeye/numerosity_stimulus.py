@@ -11,14 +11,18 @@ import popeye.utilities as utils
 
 
 def generate_log_numerosity(ts):
-    # quuantities
+
+    # quantities
     numerosities = np.unique(ts)
+
     # one-hot vectors
     ohv = np.eye(len(numerosities))
+
     # translation between numerosity and ohv-> lookup with shape (1,max(num))
     lut = np.zeros((np.max(numerosities)), dtype=int)
     lut[numerosities-1] = np.arange(0, len(numerosities))
 
+    # stimulus timeseries encoded as ohv
     stimulus_ts = ohv[lut[np.array(ts)-1]].T
 
     return stimulus_ts, np.log(numerosities)
