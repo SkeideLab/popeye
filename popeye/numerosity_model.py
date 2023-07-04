@@ -85,16 +85,17 @@ class NumerosityModel(PopulationModel):
 
         model = self.calc_prediction(num_pref, tw)
 
+        # if model predicts timeseries of zero: return prediction without fit
+        if not np.any(model):
+            return model
         # regress out mean and amplitude
         beta, baseline = self.regress(model, self.data)
 
         # scale
-        if not np.isnan(beta):
-            model *= beta
+        model *= beta
 
         # offset
-        if not np.isnan(baseline):
-            model += baseline
+        model += baseline
 
         return model
 
@@ -116,12 +117,10 @@ class NumerosityModel(PopulationModel):
         else:
 
             # scale
-            if not np.isnan(beta):
-                model *= beta
+            model *= beta
 
             # offset
-            if not np.isnan(baseline):
-                model += baseline
+            model += baseline
 
             return model
 
