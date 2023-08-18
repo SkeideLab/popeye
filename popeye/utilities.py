@@ -711,8 +711,10 @@ def percent_change(ts, ax=-1):
            [ -11.7647,   -5.8824,    0.    ,    5.8824,   11.7647]])
     """
     ts = np.asarray(ts)
+    mean = np.expand_dims(np.mean(ts, ax), ax)
 
-    return (ts / np.expand_dims(np.mean(ts, ax), ax) - 1) * 100
+    # check for division by zero: return 0% change
+    return (np.divide(ts, mean, out=np.ones_like(ts), where=mean != 0) - 1) * 100
 
 
 def zscore(time_series, axis=-1):
