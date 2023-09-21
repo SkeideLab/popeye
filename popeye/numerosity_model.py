@@ -13,12 +13,20 @@ from scipy.interpolate import interp1d
 from scipy.signal import fftconvolve
 import numpy as np
 import warnings
+from sklearn.linear_model import LinearRegression
+
 warnings.simplefilter("ignore")
 
 
 class NumerosityModel(PopulationModel):
-
-    def __init__(self, stimulus, hrf_model, normalizer=utils.percent_change, hrf_delay=0):
+    def __init__(
+        self,
+        stimulus,
+        hrf_model,
+        normalizer=utils.percent_change,
+        hrf_delay=0,
+        nuisance=None,
+    ):
         r"""A 1D Gaussian population receptive field model [1]_.
 
         Paramaters
@@ -35,7 +43,9 @@ class NumerosityModel(PopulationModel):
         """
 
         # invoke the base class
-        PopulationModel.__init__(self, stimulus, hrf_model, normalizer)
+        PopulationModel.__init__(
+            self, stimulus, hrf_model, normalizer, nuisance=nuisance
+        )
         self.hrf_delay = hrf_delay
 
     def calc_prediction(self, num_pref, tw):
@@ -43,42 +53,54 @@ class NumerosityModel(PopulationModel):
         # rf = np.exp(-1 * (self.stimulus.log_grid - num_pref) ** 2 /
         #             (2 * tw**2))
         rf = generate_og_receptive_field(
-            num_pref, 0, tw, self.stimulus.log_grid, np.zeros(self.stimulus.log_grid.shape))
+            num_pref,
+            0,
+            tw,
+            self.stimulus.log_grid,
+            np.zeros(self.stimulus.log_grid.shape),
+        )
 
         # evaluate entire RF
-        mask = np.ones_like(rf).astype('uint8')
+        mask = np.ones_like(rf).astype("uint8")
 
         # extract the response
         response = generate_rf_timeseries_1D(
-            self.stimulus.stimuli_oh, rf.squeeze(), mask.squeeze())
+            self.stimulus.stimuli_oh, rf.squeeze(), mask.squeeze()
+        )
 
         # convolve it with the stimulus
-        model = fftconvolve(response, self.hrf())[0:len(response)]
-
+        _hrf = self.hrf()
+        model = np.stack(
+            [
+                fftconvolve(response, _hrf[:, i])[0 : len(response)]
+                for i in range(_hrf.shape[1])
+            ],
+            axis=1,
+        )
         # units
-        model = self.normalizer(model)
+        model = self.normalizer(model, ax=0)
 
         return model
 
     def generate_ballpark_prediction(self, num_pref, tw):
         r"""
-        Generate a prediction for the 1D Gaussian model.
+            Generate a prediction for the 1D Gaussian model.
 
-        This function generates a prediction of the 1D Gaussian model,
-        given a stimulus and the stimulus-referred model parameters.
-    This method does not estimate the scaling
-        paramter `beta` or the offset parameter `baseline`, since this
-        method will be used for a grid-fit and these values can simply
-        be calculated for a particular `pref_num` and `tw` pair.
+            This function generates a prediction of the 1D Gaussian model,
+            given a stimulus and the stimulus-referred model parameters.
+        This method does not estimate the scaling
+            paramter `beta` or the offset parameter `baseline`, since this
+            method will be used for a grid-fit and these values can simply
+            be calculated for a particular `pref_num` and `tw` pair.
 
-        Paramaters
-        ----------
+            Paramaters
+            ----------
 
-        pref_num : float
-            The preferred numerosity of the 1D Gaussian in log space
+            pref_num : float
+                The preferred numerosity of the 1D Gaussian in log space
 
-        tw : float
-            The width of the 1D Gaussian in log space
+            tw : float
+                The width of the 1D Gaussian in log space
 
         """
 
@@ -86,19 +108,20 @@ class NumerosityModel(PopulationModel):
 
         # if model predicts timeseries of zero: return prediction without fit
         if not np.any(model):
+            model = model if model.ndim == 1 else model[:, 0]
             return model
         # regress out mean and amplitude
-        beta, baseline = self.regress(model, self.data)
+        coefs = self.regress(model, self.data)
 
         # scale
-        model *= beta
+        model = np.sum((coefs[1:] * model), axis=1)
 
         # offset
-        model += baseline
+        model += coefs[0]
 
         return model
 
-    def generate_prediction(self, num_pref, tw, beta, baseline, unscaled=False):
+    def generate_prediction(self, num_pref, tw, baseline, *beta, unscaled=False):
         r"""
         Generate a prediction for the 1D Gaussian auditory pRF model.
 
@@ -113,29 +136,43 @@ class NumerosityModel(PopulationModel):
         model = self.calc_prediction(num_pref, tw)
         if unscaled:
             return model
-        else:
 
-            # scale
-            model *= beta
+        # scale
+        model = np.sum(model * np.array(beta), axis=1)
 
-            # offset
-            model += baseline
+        # offset
+        model += baseline
 
-            return model
+        return model
+
+    def regress(self, X, y):
+        return (
+            LinearRegression()
+            .fit(np.concatenate([np.ones((X.shape[0], 1)), X], axis=1), y)
+            .coef_
+        )
 
 
 class NumerosityFit(PopulationFit):
-
-    def __init__(self, model, data, grids, bounds,
-                 voxel_index=(1, 2, 3), Ns=None, auto_fit=True, verbose=0):
+    def __init__(
+        self,
+        model,
+        data,
+        grids,
+        bounds,
+        voxel_index=(1, 2, 3),
+        Ns=None,
+        auto_fit=True,
+        verbose=0,
+    ):
         r"""
         A class containing tools for fitting the 1D Gaussian auditory pRF model.
 
-        The `AuditoryFit` class houses all the fitting tool that are associated with 
-        estimatinga pRF model.  The `PopulationFit` takes a `AuditoryModel` instance 
-        `model` and a time-series `data`.  In addition, extent and sampling-rate of a 
-        brute-force grid-search is set with `grids` and `Ns`.  Use `bounds` to set 
-        limits on the search space for each parameter.  
+        The `AuditoryFit` class houses all the fitting tool that are associated with
+        estimatinga pRF model.  The `PopulationFit` takes a `AuditoryModel` instance
+        `model` and a time-series `data`.  In addition, extent and sampling-rate of a
+        brute-force grid-search is set with `grids` and `Ns`.  Use `bounds` to set
+        limits on the search space for each parameter.
 
         Paramaters
         ----------
@@ -152,14 +189,14 @@ class NumerosityFit(PopulationFit):
             The tuple contains pairs of upper and lower bounds for exploring a
             given dimension.  For example `grids=((-10,10),(0,5),)` will
             search the first dimension from -10 to 10 and the second from 0 to 5.
-            These values cannot be `None`. 
+            These values cannot be `None`.
 
             For more information, see `scipy.optimize.brute`.
 
         bounds : tuple
             A tuple containing the upper and lower bounds for each parameter
             in `parameters`.  If a parameter is not bounded, simply use
-            `None`.  For example, `fit_bounds=((0,None),(-10,10),)` would 
+            `None`.  For example, `fit_bounds=((0,None),(-10,10),)` would
             bound the first parameter to be any positive number while the
             second parameter would be bounded between -10 and 10.
 
@@ -169,14 +206,14 @@ class NumerosityFit(PopulationFit):
             For more information, see `scipy.optimize.brute`.
 
         voxel_index : tuple
-            A tuple containing the index of the voxel being modeled. The 
-            fitting procedure does not require a voxel index, but 
+            A tuple containing the index of the voxel being modeled. The
+            fitting procedure does not require a voxel index, but
             collating the results across many voxels will does require voxel
-            indices. With voxel indices, the brain volume can be reconstructed 
+            indices. With voxel indices, the brain volume can be reconstructed
             using the newly computed model estimates.
 
         auto_fit : bool
-            A flag for automatically running the fitting procedures once the 
+            A flag for automatically running the fitting procedures once the
             `GaussianFit` object is instantiated.
 
         verbose : int
@@ -187,15 +224,23 @@ class NumerosityFit(PopulationFit):
         """
 
         # invoke the base class
-        PopulationFit.__init__(self, model, data, grids, bounds,
-                               voxel_index, Ns, auto_fit, verbose)
+        PopulationFit.__init__(
+            self, model, data, grids, bounds, voxel_index, Ns, auto_fit, verbose
+        )
 
     @auto_attr
     def overloaded_estimate(self):
-        fwhm = self.tw*(2*np.sqrt(2*np.log(2)))
-        fwhm = np.exp(self.num_pref+fwhm/2)-np.exp(self.num_pref-fwhm/2)
+        fwhm = self.tw * (2 * np.sqrt(2 * np.log(2)))
+        fwhm = np.exp(self.num_pref + fwhm / 2) - np.exp(self.num_pref - fwhm / 2)
 
-        return [np.exp(self.num_pref), fwhm, self.tw, self.rsquared, self.beta, self.baseline]
+        return [
+            np.exp(self.num_pref),
+            fwhm,
+            self.tw,
+            self.rsquared,
+            self.beta,
+            self.baseline,
+        ]
 
     @auto_attr
     def num_pref0(self):
@@ -207,11 +252,11 @@ class NumerosityFit(PopulationFit):
 
     @auto_attr
     def beta0(self):
-        return self.ballpark[2]
+        return self.ballpark[3:]
 
     @auto_attr
     def baseline0(self):
-        return self.ballpark[3]
+        return self.ballpark[2]
 
     @auto_attr
     def num_pref(self):
@@ -223,16 +268,33 @@ class NumerosityFit(PopulationFit):
 
     @auto_attr
     def beta(self):
-        return self.estimate[2]
+        return self.estimate[3:]
 
     @auto_attr
     def baseline(self):
-        return self.estimate[3]
+        return self.estimate[2]
 
     @auto_attr
     def receptive_field(self):
-
         # generate stimulus time-series
-        rf = np.exp(-1 * (self.model.stimulus.log_grid - self.num_pref) ** 2 /
-                    (2 * self.tw**2))
+        rf = np.exp(
+            -1
+            * (self.model.stimulus.log_grid - self.num_pref) ** 2
+            / (2 * self.tw**2)
+        )
         return rf
+
+    @auto_attr
+    def slope(self):
+        return self.model.regress(self.ballpark_prediction, self.data)[1:]
+
+    @auto_attr
+    def intercept(self):
+        return self.model.regress(self.ballpark_prediction, self.data)[0]
+
+    @auto_attr
+    def ballpark(self):
+        if self.model.cached_model_path is not None:  # pragma: no cover
+            return self.best_cached_model_parameters
+        else:
+            return np.append(self.brute_force[0], (self.intercept, *self.slope))

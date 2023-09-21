@@ -12,6 +12,7 @@ from scipy.stats import linregress
 import popeye.utilities as utils
 import numpy as np
 import numexpr as ne
+import statsmodels.api as sm
 
 try:  # pragma: no cover
     from types import SliceType
